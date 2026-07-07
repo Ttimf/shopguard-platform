@@ -1,0 +1,18 @@
+# ShopGuard — reverse proxy с авто-HTTPS (Let's Encrypt).
+# Домены и e-mail берутся из окружения (см. .env.production).
+
+{
+	email {$ACME_EMAIL}
+}
+
+# API + WebSocket (gateway). Caddy сам апгрейдит WebSocket (/ws/alerts).
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy gateway:8080
+}
+
+# Публичный доступ к файлам MinIO (presigned-ссылки на снимки/клипы).
+{$FILES_DOMAIN} {
+	encode gzip
+	reverse_proxy minio:9000
+}

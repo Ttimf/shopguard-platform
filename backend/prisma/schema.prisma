@@ -1,0 +1,294 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- auth (Этап 3) ----
+
+enum Role {
+  OWNER // владелец магазина
+  GUARD // охранник / оператор
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  role         Role     @default(OWNER)
+  isBlocked    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---- users / stores (Этап 4) ----
+
+model Store {
+  id             String   @id @default(uuid())
+  ownerId        String // User.id (владелец)
+  name           String
+  address        String?
+  telegramChatId String? // chat_id для Telegram-алертов (Этап 9)
+  modelOverride  String? // A/B: закреплённая за магазином модель YOLO
+  createdAt      DateTime @default(now())
+
+  staff     StoreStaff[]
+  cameras   Camera[]
+  blacklist BlacklistPerson[]
+
+  @@index([ownerId])
+}
+
+model StoreStaff {
+  id      String @id @default(uuid())
+  storeId String
+  userId  String // User.id (охранник/оператор)
+  role    Role   @default(GUARD)
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, userId])
+  @@index([storeId])
+}
+
+// ---- cameras / zones (Этап 4) ----
+
+enum ZoneType {
+  SHELF // полка
+  EXIT // выход / касса
+}
+
+enum CameraStatus {
+  ONLINE
+  OFFLINE
+  UNKNOWN
+}
+
+model Camera {
+  id           String       @id @default(uuid())
+  storeId      String
+  name         String
+  description  String?
+  rtspUrlEnc   String // базовый RTSP-URL без кредов (шифруется)
+  username     String? // логин RTSP (не секрет)
+  passwordEnc  String? // пароль RTSP (шифруется)
+  manufacturer String?
+  model        String?
+  location     String?
+  enabled      Boolean      @default(true)
+  status       CameraStatus @default(UNKNOWN)
+  fpsLimit     Int          @default(15) // лимит обрабатываемых кадров
+  fps          Int? // измеренный FPS потока (из теста)
+  resolution   String? // напр. 1920x1080 (из теста)
+  lastOnline   DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  store    Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  zones    Zone[]
+  behavior BehaviorSettings?
+  events   Event[]
+
+  @@index([storeId])
+}
+
+model Zone {
+  id       String   @id @default(uuid())
+  cameraId String
+  type     ZoneType
+  polygon  Json // [[x,y],...] или [x1,y1,x2,y2]
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId])
+}
+
+model BehaviorSettings {
+  cameraId            String  @id
+  shelfDwellSeconds   Float   @default(3.0)
+  exitConfirmSeconds  Float   @default(5.0)
+  maxPersonLostSeconds Float  @default(10.0)
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+}
+
+// ---- events (Этап 4) ----
+
+enum EventType {
+  THEFT // подозрение на кражу
+  BLACKLIST // человек из чёрного списка
+}
+
+enum EventStatus {
+  NEW
+  REVIEWED
+  FALSE_ALARM
+}
+
+model Event {
+  id          String      @id @default(uuid())
+  cameraId    String
+  type        EventType
+  trackId     Int?
+  personName  String? // для blacklist
+  confidence  Float?
+  clipKey     String? // ключ клипа в S3
+  snapshotKey String? // ключ снимка в S3
+  modelVersion String? // A/B: модель, поймавшая событие
+  status      EventStatus @default(NEW)
+  reviewedBy  String? // User.id
+  createdAt   DateTime    @default(now())
+
+  camera Camera @relation(fields: [cameraId], references: [id], onDelete: Cascade)
+
+  @@index([cameraId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ---- blacklist (Этап 4) ----
+
+model BlacklistPerson {
+  id        String   @id @default(uuid())
+  storeId   String
+  name      String
+  embedding Json? // вектор лица (float[]); сравнение — в ai-detection
+  photoKey  String? // фото в S3
+  createdAt DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+// ---- Event Engine (Этап 14.1): обобщённый лог событий ----
+// Отдельно от алертного Event; без FK — аудит-лог переживает удаление камеры.
+
+model EventLog {
+  id           String   @id @default(uuid()) // eventId
+  storeId      String
+  cameraId     String?
+  trackingId   Int?
+  eventType    String
+  timestamp    DateTime
+  confidence   Float?
+  modelVersion String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  @@index([storeId])
+  @@index([cameraId])
+  @@index([eventType])
+  @@index([timestamp])
+  @@index([storeId, eventType, timestamp])
+}
+
+// ---- Tracking Engine (Этап 14.2): маршрут человека между камерами ----
+// Сегмент = присутствие на одной камере; маршрут = сегменты с общим trackingId.
+
+model PersonTrack {
+  id         String    @id @default(uuid())
+  trackingId String
+  storeId    String
+  cameraId   String
+  enteredAt  DateTime
+  exitedAt   DateTime?
+  duration   Int? // секунды (exitedAt - enteredAt)
+  metadata   Json?
+  createdAt  DateTime  @default(now())
+
+  @@index([storeId])
+  @@index([trackingId])
+  @@index([cameraId])
+  @@index([storeId, trackingId])
+  @@index([storeId, trackingId, exitedAt])
+}
+
+// ---- Behavior Engine (Этап 14.3): сессия визита покупателя ----
+
+model BehaviorSession {
+  id              String    @id @default(uuid())
+  trackingId      String
+  storeId         String
+  startedAt       DateTime
+  endedAt         DateTime?
+  duration        Int? // секунды
+  visitedCameras  Json // string[]
+  productsTaken   Int       @default(0)
+  productsReturned Int      @default(0)
+  riskScore       Int       @default(0)
+  behaviorType    String    @default("BROWSER")
+  metadata        Json?
+  createdAt       DateTime  @default(now())
+
+  @@index([storeId])
+  @@index([storeId, trackingId])
+  @@index([storeId, behaviorType])
+  @@index([storeId, riskScore])
+  @@index([startedAt])
+}
+
+// ---- Purchase Matching Engine (Этап 14.4): сопоставление AI ↔ чек ----
+
+model PurchaseSession {
+  id              String   @id @default(uuid())
+  trackingId      String?
+  storeId         String
+  checkoutId      String?
+  receiptId       String?
+  status          String // MATCHED | PARTIAL_MATCH | NOT_MATCHED
+  confidence      Int      @default(0)
+  aiProducts      Json
+  receiptProducts Json
+  missingProducts Json
+  extraProducts   Json
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  @@index([storeId])
+  @@index([storeId, status])
+  @@index([checkoutId])
+  @@index([createdAt])
+}
+
+// ---- Alert Engine (Этап 14.5): финальные решения о тревогах ----
+
+model AlertDecision {
+  id                String   @id @default(uuid())
+  trackingId        String?
+  storeId           String
+  alertType         String // THEFT_ALERT | SUSPICIOUS | CAMERA_OFFLINE
+  severity          String // LOW | MEDIUM | HIGH | CRITICAL
+  decision          String // код причины
+  riskScore         Int?
+  confidence        Int?
+  behaviorSessionId String?
+  purchaseSessionId String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  @@index([storeId])
+  @@index([storeId, severity])
+  @@index([storeId, alertType])
+  @@index([createdAt])
+}

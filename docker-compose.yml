@@ -1,0 +1,177 @@
+# ShopGuard — локальный стек (Этап 2: скелет).
+# Порты host'а смещены, чтобы не конфликтовать с другими проектами.
+# Запуск:  docker compose up -d --build
+
+x-node-healthcheck: &node-health
+  test: ["CMD", "node", "-e", "require('http').get('http://localhost:'+process.env.PORT+'/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shopguard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shopguard_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-shopguard}
+    ports: ["5433:5432"]
+    volumes: ["pg_data:/var/lib/postgresql/data"]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redis_secret}"]
+    ports: ["6380:6379"]
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin123}
+    ports: ["9100:9000", "9101:9001"]
+    volumes: ["minio_data:/data"]
+
+  gateway:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/gateway/main.js"]
+    environment:
+      PORT: 8080
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_access_secret_min_32_chars}
+      S3_ENDPOINT: http://minio:9000
+      # Публичный адрес MinIO для presigned-ссылок (доступен приложению).
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9100}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      S3_BUCKET: ${S3_BUCKET:-event-clips}
+    ports: ["8080:8080"]
+    depends_on: [redis, minio]
+    healthcheck: *node-health
+
+  auth:
+    build: ./backend
+    restart: unless-stopped
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/apps/auth/main.js"]
+    environment:
+      PORT: 3001
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopguard}:${POSTGRES_PASSWORD:-shopguard_secret}@postgres:5432/${POSTGRES_DB:-shopguard}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_access_secret_min_32_chars}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_refresh_secret_min_32_chars}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+    ports: ["3001:3001"]
+    depends_on: [redis, postgres]
+    healthcheck: *node-health
+
+  user:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/user/main.js"]
+    environment:
+      PORT: 3002
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+    ports: ["3002:3002"]
+    depends_on: [redis]
+    healthcheck: *node-health
+
+  camera:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/camera/main.js"]
+    environment:
+      PORT: 3003
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopguard}:${POSTGRES_PASSWORD:-shopguard_secret}@postgres:5432/${POSTGRES_DB:-shopguard}?schema=public
+      CAMERA_ENC_KEY: ${CAMERA_ENC_KEY:-change_me_camera_enc_key_min_32_chars}
+      AI_DETECTION_URL: http://ai-detection:8000
+    ports: ["3003:3003"]
+    depends_on: [redis, postgres]
+    healthcheck: *node-health
+
+  notification:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/notification/main.js"]
+    environment:
+      PORT: 3004
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopguard}:${POSTGRES_PASSWORD:-shopguard_secret}@postgres:5432/${POSTGRES_DB:-shopguard}?schema=public
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      S3_BUCKET: ${S3_BUCKET:-event-clips}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    ports: ["3004:3004"]
+    depends_on: [redis, postgres, minio]
+    healthcheck: *node-health
+
+  storage:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/storage/main.js"]
+    environment:
+      PORT: 3005
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+    ports: ["3005:3005"]
+    depends_on: [redis]
+    healthcheck: *node-health
+
+  event:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/event/main.js"]
+    environment:
+      PORT: 3006
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopguard}:${POSTGRES_PASSWORD:-shopguard_secret}@postgres:5432/${POSTGRES_DB:-shopguard}?schema=public
+    ports: ["3006:3006"]
+    depends_on: [redis, postgres]
+    healthcheck: *node-health
+
+  ai-detection:
+    build: ./ai-detection
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
+      S3_BUCKET: ${S3_BUCKET:-event-clips}
+      YOLO_DEVICE: ${YOLO_DEVICE:-cpu}
+      # Текущая модель (без хардкода в коде). Модели — в образе models/official,
+      # пользовательские можно класть в ./ai-detection/models/custom (volume ниже).
+      YOLO_MODEL: ${YOLO_MODEL:-models/official/shopguard_v1.pt}
+      # A/B: canary-модель для X% магазинов (пусто/0 — выключено).
+      AB_CANARY_MODEL: ${AB_CANARY_MODEL:-}
+      AB_CANARY_PERCENT: ${AB_CANARY_PERCENT:-0}
+    volumes:
+      - ./ai-detection/models/custom:/app/models/custom
+    ports: ["8000:8000"]
+    depends_on: [redis, minio, camera]
+
+volumes:
+  pg_data:
+  minio_data:

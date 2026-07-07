@@ -1,0 +1,10 @@
+# Этап 7a — ядро детекции
+redis==5.0.8
+ultralytics==8.3.0
+opencv-python-headless==4.10.0.84
+imageio[ffmpeg]==2.35.1
+boto3==1.35.0
+
+# Этап 7b — распознавание лиц / чёрный список
+insightface==0.7.3
+onnxruntime==1.19.2

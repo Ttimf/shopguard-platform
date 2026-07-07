@@ -1,0 +1,67 @@
+# ─────────────── Секреты / окружение ───────────────
+# Реальные env-файлы НИКОГДА не коммитим; примеры (*.example) — можно.
+.env
+.env.*
+!.env.example
+!*.env.example
+!.env.production.example
+backend/.env
+
+# Ключи, токены, сертификаты, keystore
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+key.properties
+secrets.*
+*secret*.json
+google-services.json
+GoogleService-Info.plist
+
+# ─────────────── Node / NestJS (backend) ───────────────
+node_modules/
+dist/
+build/
+coverage/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+
+# ─────────────── Python (ai-detection) ───────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Веса моделей (бинарные артефакты — распространяются отдельно, не через git)
+*.pt
+*.onnx
+*.pth
+*.weights
+
+# ─────────────── Flutter / Dart (mobile) ───────────────
+# (в mobile/ есть свои .gitignore; дублируем ключевое на случай сборок в корне)
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/android/.gradle/
+**/ios/Pods/
+**/*.iml
+
+# ─────────────── IDE / редакторы ───────────────
+.idea/
+.vscode/
+
+# ─────────────── ОС ───────────────
+.DS_Store
+Thumbs.db

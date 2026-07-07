@@ -1,0 +1,53 @@
+# Продовый оверлей. Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# Наружу торчит только Caddy (80/443). Внутренние сервисы host-порты не публикуют.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      FILES_DOMAIN: ${FILES_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [gateway, minio]
+
+  # presigned-ссылки должны указывать на публичный домен файлов
+  gateway:
+    ports: []
+    environment:
+      S3_PUBLIC_ENDPOINT: https://${FILES_DOMAIN}
+
+  # host-порты внутренних сервисов закрыты — доступ только по внутренней сети
+  postgres:
+    ports: []
+  redis:
+    ports: []
+  minio:
+    ports: []
+  auth:
+    ports: []
+  user:
+    ports: []
+  camera:
+    ports: []
+  notification:
+    ports: []
+  storage:
+    ports: []
+  event:
+    ports: []
+  ai-detection:
+    ports: []
+
+volumes:
+  caddy_data:
+  caddy_config:
