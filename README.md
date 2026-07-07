@@ -1,0 +1,1 @@
+# shopguard-platform
