@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Требуется для работы с REST/WebSocket API (в release не добавляется автоматически). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="shopguard_mobile"
+        android:label="ShopGuard"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

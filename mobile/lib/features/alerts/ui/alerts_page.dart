@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/storage/token_storage.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/state_message.dart';
 import '../cubit/alerts_cubit.dart';
 import '../data/alerts_socket.dart';
 import '../data/event_model.dart';
@@ -34,6 +35,14 @@ class _AlertsView extends StatelessWidget {
         final cubit = context.read<AlertsCubit>();
         if (state.loading && state.events.isEmpty) {
           return const Center(child: CircularProgressIndicator());
+        }
+        if (state.error != null && state.events.isEmpty) {
+          return StateMessage(
+            icon: Icons.cloud_off_outlined,
+            text: state.error!,
+            color: AppColors.danger,
+            onRetry: cubit.load,
+          );
         }
         if (state.storeId == null) {
           return const Center(

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/info_chip.dart';
+import '../../../core/widgets/status_badge.dart';
 import '../data/camera_models.dart';
+import 'camera_status.dart';
 
 class CameraCard extends StatelessWidget {
   final CameraModel camera;
   final bool busy;
+  final VoidCallback onOpen;
   final VoidCallback onTest;
   final VoidCallback onPreview;
   final VoidCallback onEdit;
@@ -16,6 +21,7 @@ class CameraCard extends StatelessWidget {
     super.key,
     required this.camera,
     required this.busy,
+    required this.onOpen,
     required this.onTest,
     required this.onPreview,
     required this.onEdit,
@@ -26,6 +32,7 @@ class CameraCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final hint = cameraStatusHint(camera.status);
     return Card(
       clipBehavior: Clip.antiAlias,
       child: Padding(
@@ -35,20 +42,24 @@ class CameraCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                _StatusDot(camera: camera),
+                _StatusDot(status: camera.status),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(camera.name,
-                          style: Theme.of(context).textTheme.titleMedium,
-                          overflow: TextOverflow.ellipsis),
-                      if (camera.location != null &&
-                          camera.location!.isNotEmpty)
-                        Text(camera.location!,
-                            style: TextStyle(color: scheme.outline, fontSize: 12)),
-                    ],
+                  child: InkWell(
+                    onTap: onOpen,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(camera.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            overflow: TextOverflow.ellipsis),
+                        if (camera.location != null &&
+                            camera.location!.isNotEmpty)
+                          Text(camera.location!,
+                              style: TextStyle(
+                                  color: scheme.outline, fontSize: 12)),
+                      ],
+                    ),
                   ),
                 ),
                 if (busy)
@@ -66,15 +77,44 @@ class CameraCard extends StatelessWidget {
             const SizedBox(height: 6),
             Wrap(
               spacing: 8,
-              runSpacing: 4,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _chip(Icons.sensors, _statusLabel),
+                StatusBadge(
+                  label: cameraStatusLabel(camera.status),
+                  color: cameraStatusColor(camera.status),
+                ),
+                StatusBadge(
+                  label: camera.aiRunning ? 'AI работает' : 'AI стоп',
+                  color: camera.aiRunning ? Colors.green : AppColors.textMuted,
+                  icon: camera.aiRunning
+                      ? Icons.play_circle_outline
+                      : Icons.pause_circle_outline,
+                ),
                 if (camera.resolution != null)
-                  _chip(Icons.aspect_ratio, camera.resolution!),
-                if (camera.fps != null) _chip(Icons.speed, '${camera.fps} FPS'),
-                _chip(Icons.schedule, _lastOnline),
+                  InfoChip(icon: Icons.aspect_ratio, text: camera.resolution!),
+                if (camera.fps != null)
+                  InfoChip(icon: Icons.speed, text: '${camera.fps} FPS'),
+                InfoChip(icon: Icons.schedule, text: _lastOnline),
               ],
             ),
+            if (hint != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Row(
+                  children: [
+                    Icon(Icons.error_outline,
+                        size: 15, color: cameraStatusColor(camera.status)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(hint,
+                          style: TextStyle(
+                              color: cameraStatusColor(camera.status),
+                              fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -89,8 +129,13 @@ class CameraCard extends StatelessWidget {
                   icon: const Icon(Icons.photo_camera_outlined),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (v) => v == 'edit' ? onEdit() : onDelete(),
+                  onSelected: (v) => switch (v) {
+                    'open' => onOpen(),
+                    'edit' => onEdit(),
+                    _ => onDelete(),
+                  },
                   itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'open', child: Text('Подробнее')),
                     PopupMenuItem(value: 'edit', child: Text('Изменить')),
                     PopupMenuItem(value: 'delete', child: Text('Удалить')),
                   ],
@@ -103,35 +148,18 @@ class CameraCard extends StatelessWidget {
     );
   }
 
-  String get _statusLabel => switch (camera.status) {
-        'ONLINE' => 'Онлайн',
-        'OFFLINE' => 'Оффлайн',
-        _ => 'Неизвестно',
-      };
-
   String get _lastOnline => camera.lastOnline == null
       ? 'нет данных'
       : DateFormat('dd.MM HH:mm').format(camera.lastOnline!);
-
-  Widget _chip(IconData icon, String text) => Chip(
-        visualDensity: VisualDensity.compact,
-        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        avatar: Icon(icon, size: 16),
-        label: Text(text, style: const TextStyle(fontSize: 12)),
-      );
 }
 
 class _StatusDot extends StatelessWidget {
-  final CameraModel camera;
-  const _StatusDot({required this.camera});
+  final String status;
+  const _StatusDot({required this.status});
 
   @override
   Widget build(BuildContext context) {
-    final color = camera.isOnline
-        ? Colors.green
-        : camera.isOffline
-            ? Colors.red
-            : Colors.grey;
+    final color = cameraStatusColor(status);
     return Container(
       width: 12,
       height: 12,

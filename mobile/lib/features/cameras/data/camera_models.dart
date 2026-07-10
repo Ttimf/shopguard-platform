@@ -65,6 +65,10 @@ class CameraModel {
   bool get isOnline => status == 'ONLINE';
   bool get isOffline => status == 'OFFLINE';
 
+  /// AI обрабатывает поток: камера включена И онлайн.
+  /// (Отдельного поля aiRunning в API нет — выводим из enabled+status.)
+  bool get aiRunning => enabled && isOnline;
+
   factory CameraModel.fromJson(Map<String, dynamic> j) => CameraModel(
         id: j['id'] as String,
         storeId: j['storeId'] as String,

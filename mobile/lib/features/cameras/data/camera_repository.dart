@@ -31,6 +31,12 @@ class CameraRepository {
         .toList();
   }
 
+  /// Одна камера (свежие данные для детальной страницы).
+  Future<CameraModel> getCamera(String id) async {
+    final res = await _client.dio.get('/cameras/$id');
+    return CameraModel.fromJson(res.data as Map<String, dynamic>);
+  }
+
   Future<CameraModel> createCamera(Map<String, dynamic> payload) async {
     final res = await _client.dio.post('/cameras', data: payload);
     return CameraModel.fromJson(res.data as Map<String, dynamic>);

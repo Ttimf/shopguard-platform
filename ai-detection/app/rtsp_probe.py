@@ -5,6 +5,26 @@ from urllib.parse import urlparse
 
 import cv2
 
+from . import settings
+
+
+def open_capture(rtsp_url: str) -> cv2.VideoCapture:
+    """
+    Создаёт VideoCapture с явными таймаутами открытия/чтения и буфером 1.
+    Таймауты задаются параметрами до открытия — чтобы не зависнуть на
+    недоступной/зависшей камере (независимо от устаревшей ffmpeg 'stimeout').
+    """
+    cap = cv2.VideoCapture(
+        rtsp_url,
+        cv2.CAP_FFMPEG,
+        [
+            cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, settings.RTSP_OPEN_TIMEOUT_MS,
+            cv2.CAP_PROP_READ_TIMEOUT_MSEC, settings.RTSP_READ_TIMEOUT_MS,
+        ],
+    )
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    return cap
+
 # Сигнатуры производителей в пути RTSP-URL (нижний регистр).
 _URL_VENDORS = [
     ("Hikvision", ["/streaming/channels", "/isapi", "/h264/ch"]),
@@ -64,8 +84,7 @@ def detect_camera_info(rtsp_url: str, timeout: float = 3.0) -> dict:
 def test_stream(rtsp_url: str, timeout: float = 10.0) -> dict:
     """Открывает поток, берёт первый кадр, меряет задержку/FPS/разрешение."""
     started = time.time()
-    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap = open_capture(rtsp_url)
     try:
         ok, frame = cap.read()
         elapsed = time.time() - started
@@ -106,8 +125,7 @@ def encode_jpeg(frame) -> bytes | None:
 
 def grab_frame(rtsp_url: str) -> bytes | None:
     """Одиночный кадр как JPEG (когда нет активного воркера)."""
-    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap = open_capture(rtsp_url)
     try:
         ok, frame = cap.read()
         return encode_jpeg(frame) if ok and frame is not None else None

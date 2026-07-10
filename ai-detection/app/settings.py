@@ -57,6 +57,15 @@ BLACKLIST_COOLDOWN_SECONDS = _int("BLACKLIST_COOLDOWN_SECONDS", 60)
 RECONNECT_MIN_SECONDS = _int("RECONNECT_MIN_SECONDS", 2)
 RECONNECT_MAX_SECONDS = _int("RECONNECT_MAX_SECONDS", 60)
 
+# Явные таймауты OpenCV/FFmpeg на открытие/чтение потока (мс). Работают
+# независимо от устаревшей ffmpeg-опции 'stimeout' — чтобы VideoCapture не завис
+# на недоступной/зависшей камере (задаются при создании capture).
+RTSP_OPEN_TIMEOUT_MS = _int("RTSP_OPEN_TIMEOUT_MS", 10000)
+RTSP_READ_TIMEOUT_MS = _int("RTSP_READ_TIMEOUT_MS", 10000)
+
+# Ограничение множества виденных треков (защита от роста памяти при долгой работе).
+SEEN_TRACK_CAP = _int("SEEN_TRACK_CAP", 5000)
+
 # --- Контракты (должны совпадать с libs/contracts) ---
 DETECTION_EVENTS_STREAM = "detection.events"
 EVENTS_STREAM = "events.stream"  # шина Event Engine

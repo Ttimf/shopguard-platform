@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../cameras/ui/cameras_page.dart';
 import '../../alerts/ui/alerts_page.dart';
+import '../../analytics/ui/analytics_hub_page.dart';
 import '../../history/ui/history_page.dart';
 import '../../profile/ui/profile_page.dart';
 
@@ -19,10 +20,17 @@ class _HomeShellState extends State<HomeShell> {
   static const _pages = [
     CamerasPage(),
     AlertsPage(),
+    AnalyticsHubPage(),
     HistoryPage(),
     ProfilePage(),
   ];
-  static const _titles = ['Камеры', 'Алерты', 'История', 'Профиль'];
+  static const _titles = [
+    'Камеры',
+    'Алерты',
+    'Аналитика',
+    'История',
+    'Профиль'
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +46,8 @@ class _HomeShellState extends State<HomeShell> {
           NavigationDestination(
               icon: Icon(Icons.notifications_active_outlined),
               label: 'Алерты'),
+          NavigationDestination(
+              icon: Icon(Icons.insights_outlined), label: 'Аналитика'),
           NavigationDestination(icon: Icon(Icons.history), label: 'История'),
           NavigationDestination(
               icon: Icon(Icons.person_outline), label: 'Профиль'),

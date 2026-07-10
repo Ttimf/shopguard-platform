@@ -183,12 +183,17 @@ class Orchestrator:
 
         wanted = {c["id"]: c for c in configs}
 
-        # остановить удалённые/изменённые
+        # остановить удалённые/изменённые + убрать «мёртвые» (упавший поток),
+        # чтобы они пересоздались ниже — камера не теряется навсегда
         for cam_id in list(self._workers):
             worker, sig = self._workers[cam_id]
-            if cam_id not in wanted or _signature(wanted[cam_id]) != sig:
+            stale = cam_id not in wanted or _signature(wanted[cam_id]) != sig
+            dead = not worker.is_alive()
+            if stale or dead:
                 worker.stop()
                 del self._workers[cam_id]
+                if dead and not stale:
+                    print(f"[orchestrator] воркер {cam_id} умер — будет перезапущен")
 
         # запустить новые/изменённые
         for cam_id, cfg in wanted.items():

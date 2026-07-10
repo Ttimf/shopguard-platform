@@ -50,6 +50,12 @@ class AuthRepository {
     }
   }
 
+  /// Текущий пользователь (проверка действительности токена).
+  Future<AuthUser> me() async {
+    final res = await _dio.get('/auth/me');
+    return AuthUser.fromJson(res.data as Map<String, dynamic>);
+  }
+
   Future<void> logout() async {
     final refresh = await _storage.refresh;
     if (refresh != null) {

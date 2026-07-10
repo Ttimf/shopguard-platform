@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/state_message.dart';
 import '../../alerts/data/event_model.dart';
 import '../../alerts/data/events_repository.dart';
 
@@ -43,6 +44,14 @@ class _HistoryPageState extends State<HistoryPage> {
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return StateMessage(
+            icon: Icons.cloud_off_outlined,
+            text: 'Не удалось загрузить историю',
+            color: AppColors.danger,
+            onRetry: _refresh,
+          );
         }
         final events = snap.data ?? [];
         if (events.isEmpty) {

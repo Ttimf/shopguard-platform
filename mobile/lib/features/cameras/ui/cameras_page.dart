@@ -6,6 +6,7 @@ import '../cubit/cameras_cubit.dart';
 import '../data/camera_models.dart';
 import '../data/camera_repository.dart';
 import 'camera_card.dart';
+import 'camera_detail_page.dart';
 import 'camera_form_sheet.dart';
 import 'create_store_sheet.dart';
 import 'snapshot_dialog.dart';
@@ -69,6 +70,7 @@ class _CamerasView extends StatelessWidget {
                             return CameraCard(
                               camera: cam,
                               busy: state.busyId == cam.id,
+                              onOpen: () => _open(context, cam),
                               onToggle: (_) => cubit.toggleEnabled(cam),
                               onTest: () => _test(context, cubit, cam),
                               onPreview: () => _preview(context, cam),
@@ -130,6 +132,12 @@ class _CamerasView extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => SnapshotDialog(repo: repo, camera: cam),
+    );
+  }
+
+  void _open(BuildContext context, CameraModel cam) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => CameraDetailPage(camera: cam)),
     );
   }
 

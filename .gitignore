@@ -57,6 +57,8 @@ venv/
 **/android/.gradle/
 **/ios/Pods/
 **/*.iml
+# Локальный конфиг Flutter DevTools (генерируется, не для репозитория)
+devtools_options.yaml
 
 # ─────────────── IDE / редакторы ───────────────
 .idea/

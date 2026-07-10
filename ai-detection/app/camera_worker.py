@@ -10,6 +10,7 @@ from collections import deque
 import cv2
 
 from . import ab_router
+from . import rtsp_probe
 from . import settings
 from .event_publisher import EventPublisher
 from .face_recognizer import FaceRecognizer
@@ -83,74 +84,87 @@ class CameraWorker(threading.Thread):
         backoff = settings.RECONNECT_MIN_SECONDS
         offline = False
 
-        while not self._stop.is_set():
-            ok, frame = cap.read()
-            if not ok:
-                # экспоненциальный backoff (не долбим оффлайн-камеру бесконечно,
-                # но авто-восстанавливаемся, когда камера вернётся)
-                self._frames.drop(self.camera_id)
-                cap.release()
-                if not offline:
-                    offline = True
-                    self._emit("CameraOffline")
-                print(f"[{self.camera_id}] поток недоступен, повтор через {backoff}с")
-                if self._stop.wait(backoff):
-                    break
-                backoff = min(backoff * 2, settings.RECONNECT_MAX_SECONDS)
-                cap = self._open()
-                continue
+        try:
+            while not self._stop.is_set():
+                try:
+                    ok, frame = cap.read()
+                    if not ok:
+                        # экспоненциальный backoff (не долбим оффлайн-камеру
+                        # бесконечно, но авто-восстанавливаемся при возврате)
+                        self._frames.drop(self.camera_id)
+                        cap.release()
+                        if not offline:
+                            offline = True
+                            self._emit("CameraOffline")
+                        print(f"[{self.camera_id}] поток недоступен, повтор через {backoff}с")
+                        if self._stop.wait(backoff):
+                            break
+                        backoff = min(backoff * 2, settings.RECONNECT_MAX_SECONDS)
+                        cap = self._open()
+                        continue
 
-            if offline:
-                offline = False
-                self._emit("CameraOnline")
-            backoff = settings.RECONNECT_MIN_SECONDS  # восстановились — сброс
-            self._frames.put(self.camera_id, frame)
+                    if offline:
+                        offline = False
+                        self._emit("CameraOnline")
+                    backoff = settings.RECONNECT_MIN_SECONDS  # восстановились — сброс
+                    self._frames.put(self.camera_id, frame)
 
-            now = time.time()
-            if now - last < min_interval:
-                continue
-            last = now
+                    now = time.time()
+                    if now - last < min_interval:
+                        continue
+                    last = now
 
-            # горячая замена модели при switch() — только если следуем default
-            # (магазины с override/canary закреплены за своей моделью)
-            if following_default and self._models.generation != model_gen:
-                detector = self._models.create_detector()
-                model_gen = self._models.generation
-                self._model_version = self._models.version_of(None)
-                print(f"[{self.camera_id}] модель обновлена → пересоздан детектор")
+                    # горячая замена модели при switch() — только если следуем
+                    # default (магазины с override/canary закреплены за моделью)
+                    if following_default and self._models.generation != model_gen:
+                        detector = self._models.create_detector()
+                        model_gen = self._models.generation
+                        self._model_version = self._models.version_of(None)
+                        print(f"[{self.camera_id}] модель обновлена → пересоздан детектор")
 
-            self._buffer.append(frame.copy())
-            for track in detector.track(frame):
-                if track.track_id not in self._seen:
-                    self._seen.add(track.track_id)
-                    self._emit("PersonDetected", track.track_id, track.confidence)
-                in_shelf = self._zones.in_shelf(track.bbox)
-                in_exit = self._zones.in_exit(track.bbox)
-                sig = self._theft.update(track.track_id, in_shelf, in_exit, now)
-                if sig.took_product:
-                    self._emit("ProductTaken", track.track_id)
-                if sig.entered_exit:
-                    self._emit("PersonExited", track.track_id)
-                if sig.theft:
-                    print(f"[{self.camera_id}] ПОДОЗРЕНИЕ НА КРАЖУ трек #{track.track_id}")
-                    self._publisher.publish_theft(
-                        camera_id=self.camera_id,
-                        track_id=track.track_id,
-                        confidence=track.confidence,
-                        snapshot=frame,
-                        clip_frames=list(self._buffer),
-                        model_version=self._model_version,
-                    )
+                    self._buffer.append(frame.copy())
+                    for track in detector.track(frame):
+                        if track.track_id not in self._seen:
+                            # track_id монотонно растёт → при переполнении можно
+                            # очистить (повторного PersonDetected почти не будет)
+                            if len(self._seen) >= settings.SEEN_TRACK_CAP:
+                                self._seen.clear()
+                            self._seen.add(track.track_id)
+                            self._emit("PersonDetected", track.track_id, track.confidence)
+                        in_shelf = self._zones.in_shelf(track.bbox)
+                        in_exit = self._zones.in_exit(track.bbox)
+                        sig = self._theft.update(track.track_id, in_shelf, in_exit, now)
+                        if sig.took_product:
+                            self._emit("ProductTaken", track.track_id)
+                        if sig.entered_exit:
+                            self._emit("PersonExited", track.track_id)
+                        if sig.theft:
+                            print(f"[{self.camera_id}] ПОДОЗРЕНИЕ НА КРАЖУ трек #{track.track_id}")
+                            self._publisher.publish_theft(
+                                camera_id=self.camera_id,
+                                track_id=track.track_id,
+                                confidence=track.confidence,
+                                snapshot=frame,
+                                clip_frames=list(self._buffer),
+                                model_version=self._model_version,
+                            )
 
-            self._recognize_faces(frame, now)
+                    self._recognize_faces(frame, now)
 
-            if now - last_prune > 5:
-                self._theft.prune(now)
-                last_prune = now
-
-        cap.release()
-        self._frames.drop(self.camera_id)
-        print(f"[{self.camera_id}] воркер остановлен")
+                    if now - last_prune > 5:
+                        self._theft.prune(now)
+                        last_prune = now
+                except Exception as e:  # noqa: BLE001
+                    # устойчивость: сбой обработки кадра не должен ронять поток —
+                    # логируем, чуть притормаживаем и продолжаем (при поломке cap
+                    # следующий read() уйдёт в ветку переподключения выше)
+                    print(f"[{self.camera_id}] ошибка обработки кадра: {e!r}")
+                    if self._stop.wait(1):
+                        break
+        finally:
+            cap.release()
+            self._frames.drop(self.camera_id)
+            print(f"[{self.camera_id}] воркер остановлен")
 
     def _emit(
         self, event_type: str, tracking_id: int | None = None,
@@ -188,6 +202,5 @@ class CameraWorker(threading.Thread):
             )
 
     def _open(self) -> cv2.VideoCapture:
-        cap = cv2.VideoCapture(self._rtsp, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        return cap
+        # общий конструктор с явными таймаутами открытия/чтения
+        return rtsp_probe.open_capture(self._rtsp)
