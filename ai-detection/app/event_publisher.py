@@ -37,6 +37,7 @@ class EventPublisher:
         snapshot,
         clip_frames: list,
         model_version: str | None = None,
+        reid: dict | None = None,
     ) -> None:
         self._publish(
             camera_id,
@@ -47,6 +48,7 @@ class EventPublisher:
                 "trackId": str(track_id),
                 "confidence": f"{confidence:.4f}",
                 "modelVersion": model_version or "",
+                **self._reid_fields(reid),
             },
         )
 
@@ -58,6 +60,7 @@ class EventPublisher:
         snapshot,
         clip_frames: list,
         model_version: str | None = None,
+        reid: dict | None = None,
     ) -> None:
         self._publish(
             camera_id,
@@ -68,8 +71,21 @@ class EventPublisher:
                 "personName": person_name,
                 "confidence": f"{similarity:.4f}",
                 "modelVersion": model_version or "",
+                **self._reid_fields(reid),
             },
         )
+
+    @staticmethod
+    def _reid_fields(reid: dict | None) -> dict:
+        """ReID-поля для события (аддитивно). Пусто, если ReID не передан."""
+        if not reid:
+            return {}
+        return {
+            "globalPersonId": str(reid.get("global_person_id", "")),
+            "localTrackId": str(reid.get("local_track_id", "")),
+            "reidSimilarity": str(reid.get("reid_similarity", "")),
+            "reidMatched": str(reid.get("reid_matched", "")),
+        }
 
     def _publish(
         self, camera_id: str, snapshot, clip_frames: list, extra: dict

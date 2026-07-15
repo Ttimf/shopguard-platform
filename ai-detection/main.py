@@ -30,6 +30,8 @@ from app.faces import FaceIndex
 from app.frame_registry import FrameRegistry
 from app.model_manager import ModelManager
 from app.redis_rpc import RedisRpc
+from app.reid_extractor import ReIDExtractor
+from app.reid_manager import ReIDManager
 from app.storage import Storage
 from app.worker_client import WorkerClient
 
@@ -165,6 +167,8 @@ class Orchestrator:
         model_manager: ModelManager,
         frame_registry: FrameRegistry,
         event_bus: EventBus,
+        reid_extractor=None,
+        reid_manager=None,
     ):
         self._config_client = config_client
         self._publisher = publisher
@@ -173,6 +177,8 @@ class Orchestrator:
         self._models = model_manager
         self._frames = frame_registry
         self._events = event_bus
+        self._reid = reid_extractor
+        self._reid_manager = reid_manager
         self._workers: dict[str, tuple[CameraWorker, str]] = {}
         self._embed_cache: dict[str, np.ndarray] = {}  # photoKey -> embedding
 
@@ -203,7 +209,7 @@ class Orchestrator:
                 continue
             worker = CameraWorker(
                 cfg, self._publisher, self._models, self._frames,
-                self._events, self._faces,
+                self._events, self._faces, self._reid, self._reid_manager,
             )
             worker.start()
             self._workers[cam_id] = (worker, _signature(cfg))
@@ -282,6 +288,16 @@ def main():
     else:
         print("ai-detection: работаем без распознавания лиц")
 
+    # Person Re-Identification (OSNet). Общие extractor+manager на все камеры —
+    # менеджер объединяет треки МЕЖДУ камерами. При выключенном/недоступном ReID
+    # события всё равно получают стабильный global_person_id по локальному треку.
+    reid = ReIDExtractor()
+    if reid.load():
+        print("ai-detection: ReID (OSNet) включён")
+    else:
+        print("ai-detection: работаем без ReID")
+    reid_manager = ReIDManager()
+
     event_bus = EventBus()
 
     # Общий worker_id: используется и для регистрации, и для шардинга камер
@@ -289,7 +305,7 @@ def main():
     worker_id = str(uuid.uuid4())
     orchestrator = Orchestrator(
         ConfigClient(rpc, worker_id), publisher, storage, faces, model_manager,
-        frame_registry, event_bus,
+        frame_registry, event_bus, reid, reid_manager,
     )
 
     # AI Worker: регистрация узла + heartbeat каждые ~5с

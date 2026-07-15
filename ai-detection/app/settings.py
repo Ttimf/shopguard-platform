@@ -68,6 +68,18 @@ CLIP_FPS = _int("CLIP_FPS", 10)
 FACE_THRESHOLD = _float("FACE_THRESHOLD", 0.45)
 BLACKLIST_COOLDOWN_SECONDS = _int("BLACKLIST_COOLDOWN_SECONDS", 60)
 
+# --- Person Re-Identification (OSNet через TorchReID) ---
+# По умолчанию ВЫКЛ: сервис работает без torchreid (graceful), тесты/дев не
+# требуют модель. При REID_ENABLED=true и установленном torchreid — межкамерная
+# идентификация. Все пороги/лимиты — только из окружения (без хардкода).
+REID_ENABLED = _bool("REID_ENABLED", False)
+REID_MODEL = os.getenv("REID_MODEL", "osnet_x1_0")  # модель TorchReID
+REID_MODEL_PATH = os.getenv("REID_MODEL_PATH", "")  # пусто → предобученные веса
+REID_DEVICE = os.getenv("REID_DEVICE", YOLO_DEVICE)  # cuda | cpu
+REID_SIMILARITY_THRESHOLD = _float("REID_SIMILARITY_THRESHOLD", 0.7)
+REID_EMBEDDING_LIFETIME_SECONDS = _int("REID_EMBEDDING_LIFETIME_SECONDS", 300)
+REID_MAX_EMBEDDINGS = _int("REID_MAX_EMBEDDINGS", 10)  # галерея на человека
+
 # --- Переподключение к RTSP (экспоненциальный backoff) ---
 RECONNECT_MIN_SECONDS = _int("RECONNECT_MIN_SECONDS", 2)
 RECONNECT_MAX_SECONDS = _int("RECONNECT_MAX_SECONDS", 60)

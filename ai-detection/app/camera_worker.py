@@ -29,6 +29,8 @@ class CameraWorker(threading.Thread):
         frame_registry,
         event_bus,
         face_recognizer: FaceRecognizer | None = None,
+        reid_extractor=None,
+        reid_manager=None,
     ):
         super().__init__(daemon=True, name=f"cam-{config['id']}")
         self._config = config
@@ -58,6 +60,12 @@ class CameraWorker(threading.Thread):
         self.face_index = FaceIndex(threshold=settings.FACE_THRESHOLD)
         self._blacklist_last: dict[str, float] = {}
         self._model_version: str | None = None  # для тегирования событий (A/B)
+
+        # Person Re-Identification (общие extractor+manager на все камеры).
+        # Кэш reid по локальному треку — эмбеддинг считаем раз на трек (экономия GPU).
+        self._reid = reid_extractor
+        self._reid_manager = reid_manager
+        self._track_reid: dict[int, dict] = {}
 
     def stop(self) -> None:
         self._stop.set()
@@ -131,20 +139,22 @@ class CameraWorker(threading.Thread):
 
                     self._buffer.append(frame.copy())
                     for track in detector.track(frame):
+                        reid = self._resolve_reid(track, frame, now)
                         if track.track_id not in self._seen:
                             # track_id монотонно растёт → при переполнении можно
                             # очистить (повторного PersonDetected почти не будет)
                             if len(self._seen) >= settings.SEEN_TRACK_CAP:
                                 self._seen.clear()
                             self._seen.add(track.track_id)
-                            self._emit("PersonDetected", track.track_id, track.confidence)
+                            self._emit("PersonDetected", track.track_id, track.confidence,
+                                       metadata=reid)
                         in_shelf = self._zones.in_shelf(track.bbox)
                         in_exit = self._zones.in_exit(track.bbox)
                         sig = self._theft.update(track.track_id, in_shelf, in_exit, now)
                         if sig.took_product:
-                            self._emit("ProductTaken", track.track_id)
+                            self._emit("ProductTaken", track.track_id, metadata=reid)
                         if sig.entered_exit:
-                            self._emit("PersonExited", track.track_id)
+                            self._emit("PersonExited", track.track_id, metadata=reid)
                         if sig.theft:
                             print(f"[{self.camera_id}] ПОДОЗРЕНИЕ НА КРАЖУ трек #{track.track_id}")
                             self._publisher.publish_theft(
@@ -154,6 +164,7 @@ class CameraWorker(threading.Thread):
                                 snapshot=frame,
                                 clip_frames=list(self._buffer),
                                 model_version=self._model_version,
+                                reid=reid,
                             )
 
                     self._recognize_faces(frame, now)
@@ -175,7 +186,7 @@ class CameraWorker(threading.Thread):
 
     def _emit(
         self, event_type: str, tracking_id: int | None = None,
-        confidence: float | None = None,
+        confidence: float | None = None, metadata: dict | None = None,
     ) -> None:
         self._events.publish(
             event_type=event_type,
@@ -184,7 +195,46 @@ class CameraWorker(threading.Thread):
             tracking_id=tracking_id,
             confidence=confidence,
             model_version=self._model_version,
+            metadata=metadata,
         )
+
+    def _resolve_reid(self, track, frame, now: float) -> dict:
+        """ReID для трека: global_person_id + similarity + matched.
+        Эмбеддинг считается один раз на локальный трек (кэш) — экономия GPU;
+        межкамерное объединение делает общий ReIDManager."""
+        cached = self._track_reid.get(track.track_id)
+        if cached is not None:
+            return cached
+        embedding = None
+        if self._reid is not None and self._reid.ready:
+            crop = self._crop(frame, track.bbox)
+            embedding = self._reid.embed(crop)
+        if self._reid_manager is not None:
+            gid, sim, matched = self._reid_manager.identify(
+                embedding, self.camera_id, str(track.track_id), track.confidence, now,
+            )
+        else:
+            gid, sim, matched = str(track.track_id), 0.0, False  # ReID выкл → fallback
+        meta = {
+            "global_person_id": gid,
+            "local_track_id": str(track.track_id),
+            "reid_similarity": round(float(sim), 4),
+            "reid_matched": bool(matched),
+        }
+        if len(self._track_reid) >= settings.SEEN_TRACK_CAP:
+            self._track_reid.clear()
+        self._track_reid[track.track_id] = meta
+        return meta
+
+    @staticmethod
+    def _crop(frame, bbox):
+        h, w = frame.shape[:2]
+        x1, y1, x2, y2 = (int(v) for v in bbox)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(w, x2), min(h, y2)
+        if x2 <= x1 or y2 <= y1:
+            return None
+        return frame[y1:y2, x1:x2]
 
     def _recognize_faces(self, frame, now: float) -> None:
         fr = self._face_recognizer
