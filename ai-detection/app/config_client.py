@@ -4,12 +4,15 @@ from . import settings
 
 
 class ConfigClient:
-    def __init__(self, rpc: RedisRpc):
+    def __init__(self, rpc: RedisRpc, worker_id: str | None = None):
         self._rpc = rpc
+        self._worker_id = worker_id  # для шардинга камер между воркерами
 
     def fetch(self) -> list[dict]:
-        """Список активных камер с RTSP, зонами и порогами поведения."""
-        result = self._rpc.request(settings.CONFIG_LIST_PATTERN, {})
+        """Камеры, назначенные ЭТОМУ воркеру (шардинг по workerId на backend).
+        Без worker_id backend отдаёт все камеры (обратная совместимость)."""
+        data = {"workerId": self._worker_id} if self._worker_id else {}
+        result = self._rpc.request(settings.CONFIG_LIST_PATTERN, data)
         return result or []
 
     def fetch_blacklist(self) -> list[dict]:

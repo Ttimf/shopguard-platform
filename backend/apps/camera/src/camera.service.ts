@@ -21,6 +21,31 @@ import { CryptoService } from './crypto.service';
 
 const AI_URL = process.env.AI_DETECTION_URL ?? 'http://localhost:8000';
 
+// Воркер считается живым, если heartbeat был не позже WORKER_STALE_SECONDS
+// (по умолчанию 30с — 6× интервал heartbeat). Умерший выпадает из шардинга,
+// и его камеры на следующем опросе переназначаются оставшимся.
+const WORKER_STALE_MS =
+  (Number(process.env.WORKER_STALE_SECONDS) || 30) * 1000;
+
+/**
+ * Детерминированный 32-бит хэш строки (FNV-1a + финальное перемешивание fmix).
+ * Хорошее лавинообразование — корректная равномерность для rendezvous-хэширования
+ * независимо от структуры id (UUID и т.п.).
+ */
+function hashStr(s: string): number {
+  let h = 2166136261 >>> 0; // FNV-1a offset basis
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619); // FNV prime
+  }
+  h ^= h >>> 15;
+  h = Math.imul(h, 2246822507);
+  h ^= h >>> 13;
+  h = Math.imul(h, 3266489909);
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 const DEFAULT_BEHAVIOR = {
   shelfDwellSeconds: 3.0,
   exitConfirmSeconds: 5.0,
@@ -241,12 +266,12 @@ export class CameraService {
   }
 
   /** Конфигурация активных камер для ai-detection (RTSP расшифрован). */
-  async configList(): Promise<CameraConfig[]> {
+  async configList(workerId?: string): Promise<CameraConfig[]> {
     const cameras = await this.prisma.camera.findMany({
       where: { enabled: true },
       include: { zones: true, behavior: true, store: true },
     });
-    return cameras.map((c) => ({
+    const configs = cameras.map((c) => ({
       id: c.id,
       storeId: c.storeId,
       name: c.name,
@@ -266,6 +291,46 @@ export class CameraService {
         : { ...DEFAULT_BEHAVIOR },
       modelOverride: c.store.modelOverride,
     }));
+    return this.shardForWorker(configs, workerId);
+  }
+
+  /**
+   * Назначение камер конкретному воркеру: каждая камера — ровно одному живому
+   * воркеру (детерминированный hash(cameraId) % N по отсортированному списку
+   * живых). При отключении воркера его lastSeen устаревает → он выпадает, и
+   * камеры переназначаются оставшимся на следующем опросе конфига.
+   * Обратная совместимость: без workerId (старый воркер) или если вызывающий
+   * воркер ещё не в списке живых — fail-open: отдаём все камеры.
+   */
+  private async shardForWorker(
+    configs: CameraConfig[],
+    workerId?: string,
+  ): Promise<CameraConfig[]> {
+    if (!workerId) return configs;
+    const since = new Date(Date.now() - WORKER_STALE_MS);
+    const workers = await this.prisma.aiWorker.findMany({
+      where: { lastSeen: { gte: since } },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    const ids = workers.map((w) => w.id);
+    if (!ids.includes(workerId)) return configs; // не зарегистрирован → все
+    // Rendezvous hashing (HRW): камера → воркер с максимальным hash(cam:worker).
+    // При отключении воркера переназначаются только ЕГО камеры (живые не трогаются).
+    return configs.filter((c) => this.hrwOwner(c.id, ids) === workerId);
+  }
+
+  private hrwOwner(cameraId: string, workerIds: string[]): string {
+    let best = '';
+    let bestHash = -1;
+    for (const id of workerIds) {
+      const h = hashStr(`${cameraId}:${id}`);
+      if (h > bestHash || (h === bestHash && id > best)) {
+        bestHash = h;
+        best = id;
+      }
+    }
+    return best;
   }
 
   // ---- вспомогательные ----

@@ -21,16 +21,18 @@ from .redis_rpc import RedisRpc
 
 
 class WorkerClient:
-    def __init__(self, rpc: RedisRpc, metrics_provider):
+    def __init__(self, rpc: RedisRpc, metrics_provider, worker_id: str | None = None):
         """
         rpc — отдельный RedisRpc (своё соединение, чтобы не конфликтовать с
         опросом конфига из основного потока).
         metrics_provider — callable() -> (cameras: int, tracks: int, fps: int).
+        worker_id — общий id воркера (для регистрации и шардинга); если не задан,
+        генерируется здесь.
         """
         self._rpc = rpc
         self._metrics = metrics_provider
         self._gpu = GpuMetrics()
-        self.worker_id = str(uuid.uuid4())
+        self.worker_id = worker_id or str(uuid.uuid4())
         self.hostname = socket.gethostname()
         self.started_at = datetime.datetime.now(datetime.timezone.utc)
         self._stop = threading.Event()

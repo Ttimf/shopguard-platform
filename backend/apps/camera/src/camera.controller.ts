@@ -3,6 +3,7 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import { RpcHttpExceptionFilter } from '@app/common';
 import {
   CAMERA_PATTERNS,
+  ConfigListDto,
   CreateBlacklistDto,
   CreateCameraDto,
   CreateStoreDto,
@@ -101,8 +102,8 @@ export class CameraController {
   }
 
   @MessagePattern(CAMERA_PATTERNS.CONFIG_LIST)
-  configList() {
-    return this.cameras.configList();
+  configList(@Payload() data?: ConfigListDto) {
+    return this.cameras.configList(data?.workerId);
   }
 
   @MessagePattern(CAMERA_PATTERNS.BLACKLIST_CREATE)

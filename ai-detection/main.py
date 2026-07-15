@@ -13,6 +13,7 @@ import base64
 import json
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import cv2
@@ -282,8 +283,12 @@ def main():
         print("ai-detection: работаем без распознавания лиц")
 
     event_bus = EventBus()
+
+    # Общий worker_id: используется и для регистрации, и для шардинга камер
+    # (backend отдаёт этому воркеру только назначенные ему камеры).
+    worker_id = str(uuid.uuid4())
     orchestrator = Orchestrator(
-        ConfigClient(rpc), publisher, storage, faces, model_manager,
+        ConfigClient(rpc, worker_id), publisher, storage, faces, model_manager,
         frame_registry, event_bus,
     )
 
@@ -306,6 +311,7 @@ def main():
     worker = WorkerClient(
         RedisRpc(settings.REDIS_HOST, settings.REDIS_PORT, settings.REDIS_PASSWORD),
         _worker_metrics,
+        worker_id=worker_id,
     )
     worker.register()
     worker.start_heartbeat()

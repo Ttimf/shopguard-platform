@@ -30,6 +30,11 @@ export const CAMERA_PATTERNS = {
 
 export type ZoneKind = 'SHELF' | 'EXIT';
 
+/** Запрос конфига камер от ai-detection (workerId — для шардинга камер). */
+export interface ConfigListDto {
+  workerId?: string;
+}
+
 // ---- входные данные (ownerId проставляет gateway из JWT) ----
 
 export interface CreateStoreDto {
