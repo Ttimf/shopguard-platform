@@ -155,10 +155,13 @@ services:
     gpus: all
     environment:
       PORT: 8000
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      # Адреса Redis/MinIO вынесены в ENV (по умолчанию — внутренние имена
+      # compose). При запуске ai-detection на отдельном ПК/GPU-сервере задайте
+      # AI_REDIS_HOST / AI_S3_ENDPOINT на адрес VPS (см. ai-detection/.env.example).
+      REDIS_HOST: ${AI_REDIS_HOST:-redis}
+      REDIS_PORT: ${AI_REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: ${AI_S3_ENDPOINT:-http://minio:9000}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
       S3_BUCKET: ${S3_BUCKET:-event-clips}

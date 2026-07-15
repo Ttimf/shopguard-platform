@@ -1,0 +1,22 @@
+# Автономный запуск ТОЛЬКО ai-detection на отдельном ПК / GPU-сервере.
+# Не зависит от главного docker-compose.yml и других сервисов VPS —
+# адреса Redis/MinIO берутся из ./.env (см. .env.example).
+#
+# Запуск (из каталога ai-detection/):
+#   cp .env.example .env   # затем заполнить адреса VPS
+#   docker compose -f docker-compose.standalone.yml --env-file .env up -d --build
+#
+# Требует nvidia-container-toolkit на хосте для доступа к GPU.
+
+services:
+  ai-detection:
+    build: .
+    image: shopguard-platform-ai-detection
+    restart: unless-stopped
+    gpus: all                 # доступ к NVIDIA GPU (Compose v2.30+/v5)
+    env_file:
+      - .env                  # все адреса и настройки — отсюда (без хардкода)
+    ports:
+      - "${PORT:-8000}:8000"  # health + приём test/snapshot от camera-service
+    volumes:
+      - ./models/custom:/app/models/custom
