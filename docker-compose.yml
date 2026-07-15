@@ -192,6 +192,23 @@ services:
     ports: ["8000:8000"]
     depends_on: [redis, minio, camera]
 
+  # ReID Service: единая галерея Person Re-Identification для всех AI Worker.
+  # Тот же образ ai-detection, команда python reid_service.py. GPU не нужен
+  # (numpy). Обмен — Redis RPC (reid.identify), портов наружу нет.
+  reid:
+    build: ./ai-detection
+    image: shopguard-platform-ai-detection
+    restart: unless-stopped
+    command: ["python", "reid_service.py"]
+    environment:
+      REDIS_HOST: ${AI_REDIS_HOST:-redis}
+      REDIS_PORT: ${AI_REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      REID_SIMILARITY_THRESHOLD: ${REID_SIMILARITY_THRESHOLD:-0.7}
+      REID_EMBEDDING_LIFETIME_SECONDS: ${REID_EMBEDDING_LIFETIME_SECONDS:-300}
+      REID_MAX_EMBEDDINGS: ${REID_MAX_EMBEDDINGS:-10}
+    depends_on: [redis]
+
 volumes:
   pg_data:
   minio_data:

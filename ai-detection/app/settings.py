@@ -79,6 +79,9 @@ REID_DEVICE = os.getenv("REID_DEVICE", YOLO_DEVICE)  # cuda | cpu
 REID_SIMILARITY_THRESHOLD = _float("REID_SIMILARITY_THRESHOLD", 0.7)
 REID_EMBEDDING_LIFETIME_SECONDS = _int("REID_EMBEDDING_LIFETIME_SECONDS", 300)
 REID_MAX_EMBEDDINGS = _int("REID_MAX_EMBEDDINGS", 10)  # галерея на человека
+# RPC к отдельному ReID Service (общая галерея на все AI Worker).
+REID_RPC_PATTERN = os.getenv("REID_RPC_PATTERN", "reid.identify")
+REID_RPC_TIMEOUT = _float("REID_RPC_TIMEOUT", 3.0)
 
 # --- Переподключение к RTSP (экспоненциальный backoff) ---
 RECONNECT_MIN_SECONDS = _int("RECONNECT_MIN_SECONDS", 2)

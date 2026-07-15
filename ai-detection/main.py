@@ -30,8 +30,8 @@ from app.faces import FaceIndex
 from app.frame_registry import FrameRegistry
 from app.model_manager import ModelManager
 from app.redis_rpc import RedisRpc
+from app.reid_client import ReIDClient
 from app.reid_extractor import ReIDExtractor
-from app.reid_manager import ReIDManager
 from app.storage import Storage
 from app.worker_client import WorkerClient
 
@@ -168,7 +168,7 @@ class Orchestrator:
         frame_registry: FrameRegistry,
         event_bus: EventBus,
         reid_extractor=None,
-        reid_manager=None,
+        reid_client=None,
     ):
         self._config_client = config_client
         self._publisher = publisher
@@ -178,7 +178,7 @@ class Orchestrator:
         self._frames = frame_registry
         self._events = event_bus
         self._reid = reid_extractor
-        self._reid_manager = reid_manager
+        self._reid_client = reid_client
         self._workers: dict[str, tuple[CameraWorker, str]] = {}
         self._embed_cache: dict[str, np.ndarray] = {}  # photoKey -> embedding
 
@@ -209,7 +209,7 @@ class Orchestrator:
                 continue
             worker = CameraWorker(
                 cfg, self._publisher, self._models, self._frames,
-                self._events, self._faces, self._reid, self._reid_manager,
+                self._events, self._faces, self._reid, self._reid_client,
             )
             worker.start()
             self._workers[cam_id] = (worker, _signature(cfg))
@@ -288,15 +288,22 @@ def main():
     else:
         print("ai-detection: работаем без распознавания лиц")
 
-    # Person Re-Identification (OSNet). Общие extractor+manager на все камеры —
-    # менеджер объединяет треки МЕЖДУ камерами. При выключенном/недоступном ReID
-    # события всё равно получают стабильный global_person_id по локальному треку.
+    # Person Re-Identification (OSNet). Extractor считает эмбеддинг; галерея НЕ
+    # хранится в воркере — эмбеддинг уходит в отдельный ReID Service через RPC
+    # (общая галерея на все воркеры). При REID выключен — reid_client=None, событие
+    # получает стабильный global_person_id по локальному треку (обратная совместимость).
     reid = ReIDExtractor()
     if reid.load():
         print("ai-detection: ReID (OSNet) включён")
     else:
         print("ai-detection: работаем без ReID")
-    reid_manager = ReIDManager()
+    reid_client = (
+        ReIDClient(
+            RedisRpc(settings.REDIS_HOST, settings.REDIS_PORT, settings.REDIS_PASSWORD)
+        )
+        if settings.REID_ENABLED
+        else None
+    )
 
     event_bus = EventBus()
 
@@ -305,7 +312,7 @@ def main():
     worker_id = str(uuid.uuid4())
     orchestrator = Orchestrator(
         ConfigClient(rpc, worker_id), publisher, storage, faces, model_manager,
-        frame_registry, event_bus, reid, reid_manager,
+        frame_registry, event_bus, reid, reid_client,
     )
 
     # AI Worker: регистрация узла + heartbeat каждые ~5с

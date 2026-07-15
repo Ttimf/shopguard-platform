@@ -30,7 +30,7 @@ class CameraWorker(threading.Thread):
         event_bus,
         face_recognizer: FaceRecognizer | None = None,
         reid_extractor=None,
-        reid_manager=None,
+        reid_client=None,
     ):
         super().__init__(daemon=True, name=f"cam-{config['id']}")
         self._config = config
@@ -61,10 +61,11 @@ class CameraWorker(threading.Thread):
         self._blacklist_last: dict[str, float] = {}
         self._model_version: str | None = None  # для тегирования событий (A/B)
 
-        # Person Re-Identification (общие extractor+manager на все камеры).
-        # Кэш reid по локальному треку — эмбеддинг считаем раз на трек (экономия GPU).
+        # Person Re-Identification: локальной галереи нет — эмбеддинг уходит в
+        # отдельный ReID Service через reid_client (RPC). Кэш по локальному треку —
+        # эмбеддинг+RPC считаем раз на трек (экономия GPU и сети).
         self._reid = reid_extractor
-        self._reid_manager = reid_manager
+        self._reid_client = reid_client
         self._track_reid: dict[int, dict] = {}
 
     def stop(self) -> None:
@@ -139,7 +140,7 @@ class CameraWorker(threading.Thread):
 
                     self._buffer.append(frame.copy())
                     for track in detector.track(frame):
-                        reid = self._resolve_reid(track, frame, now)
+                        reid = self._resolve_reid(track, frame)
                         if track.track_id not in self._seen:
                             # track_id монотонно растёт → при переполнении можно
                             # очистить (повторного PersonDetected почти не будет)
@@ -198,23 +199,23 @@ class CameraWorker(threading.Thread):
             metadata=metadata,
         )
 
-    def _resolve_reid(self, track, frame, now: float) -> dict:
+    def _resolve_reid(self, track, frame) -> dict:
         """ReID для трека: global_person_id + similarity + matched.
-        Эмбеддинг считается один раз на локальный трек (кэш) — экономия GPU;
-        межкамерное объединение делает общий ReIDManager."""
+        Эмбеддинг считается один раз на локальный трек (кэш) и отправляется в
+        отдельный ReID Service (общая галерея); межкамерное объединение — там."""
         cached = self._track_reid.get(track.track_id)
         if cached is not None:
             return cached
-        embedding = None
-        if self._reid is not None and self._reid.ready:
-            crop = self._crop(frame, track.bbox)
-            embedding = self._reid.embed(crop)
-        if self._reid_manager is not None:
-            gid, sim, matched = self._reid_manager.identify(
-                embedding, self.camera_id, str(track.track_id), track.confidence, now,
+        if self._reid_client is not None:
+            embedding = None
+            if self._reid is not None and self._reid.ready:
+                crop = self._crop(frame, track.bbox)
+                embedding = self._reid.embed(crop)
+            gid, sim, matched = self._reid_client.identify(
+                embedding, self.camera_id, str(track.track_id), track.confidence,
             )
         else:
-            gid, sim, matched = str(track.track_id), 0.0, False  # ReID выкл → fallback
+            gid, sim, matched = str(track.track_id), 0.0, False  # ReID выкл  # ReID выкл → fallback
         meta = {
             "global_person_id": gid,
             "local_track_id": str(track.track_id),
