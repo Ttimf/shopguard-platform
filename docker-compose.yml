@@ -151,6 +151,8 @@ services:
   ai-detection:
     build: ./ai-detection
     restart: unless-stopped
+    # Доступ к NVIDIA GPU (Compose v2.30+/v5: короткая форма `gpus`).
+    gpus: all
     environment:
       PORT: 8000
       REDIS_HOST: redis
@@ -160,7 +162,7 @@ services:
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin123}
       S3_BUCKET: ${S3_BUCKET:-event-clips}
-      YOLO_DEVICE: ${YOLO_DEVICE:-cpu}
+      YOLO_DEVICE: ${YOLO_DEVICE:-cuda}
       # Текущая модель (без хардкода в коде). Модели — в образе models/official,
       # пользовательские можно класть в ./ai-detection/models/custom (volume ниже).
       YOLO_MODEL: ${YOLO_MODEL:-models/official/shopguard_v1.pt}

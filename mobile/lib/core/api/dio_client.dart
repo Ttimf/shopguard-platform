@@ -8,7 +8,7 @@ import '../storage/token_storage.dart';
 /// --dart-define=API_URL=http://IP:8080/api
 const String apiBaseUrl = String.fromEnvironment(
   'API_URL',
-  defaultValue: 'http://localhost:8080/api',
+  defaultValue: 'https://api.shopguardapp.net/api',
 );
 
 /// Dio с базовым адресом, подстановкой access-токена и автообновлением по 401.

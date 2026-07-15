@@ -7,12 +7,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libglib2.0-0 build-essential cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# CPU-only torch с официального индекса PyTorch — без ~2 ГБ CUDA-библиотек
-# (сервис работает на CPU). Ставим до остального, чтобы ultralytics не тянул
-# CUDA-сборку torch.
+# CUDA-сборка torch (GPU: NVIDIA RTX 4060 = Ada / SM 8.9, CUDA 12.1).
+# CUDA-рантайм идёт внутри wheel'ов — базовый образ менять не нужно, драйвер
+# пробрасывается хостом (nvidia-container-toolkit). Версии те же, что и раньше,
+# поэтому совместимость с ultralytics сохраняется. Ставим до остального, чтобы
+# ultralytics не подтянул другую сборку torch.
 RUN pip install --no-cache-dir \
     torch==2.4.1 torchvision==0.19.1 \
-    --index-url https://download.pytorch.org/whl/cpu
+    --index-url https://download.pytorch.org/whl/cu121
 
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
