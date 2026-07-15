@@ -22,33 +22,33 @@ services:
 
   # presigned-ссылки должны указывать на публичный домен файлов
   gateway:
-    ports: []
+    ports: !reset null
     environment:
       S3_PUBLIC_ENDPOINT: https://${FILES_DOMAIN}
 
   # host-порты внутренних сервисов закрыты — доступ только по внутренней сети
   postgres:
-    ports: []
+    ports: !reset null
   redis:
-    ports: []
+    ports: !reset null
   minio:
-    ports: []
+    ports: !reset null
   auth:
-    ports: []
+    ports: !reset null
   user:
-    ports: []
+    ports: !reset null
   camera:
-    ports: []
+    ports: !reset null
   notification:
-    ports: []
+    ports: !reset null
   storage:
-    ports: []
+    ports: !reset null
   event:
-    ports: []
+    ports: !reset null
   worker:
-    ports: []
+    ports: !reset null
   ai-detection:
-    ports: []
+    ports: !reset null
 
 volumes:
   caddy_data:

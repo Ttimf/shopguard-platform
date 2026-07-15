@@ -1,0 +1,21 @@
+# Оверлей для удалённого AI-воркера через VPN (WireGuard / Tailscale).
+#
+# Публикует Redis и MinIO ТОЛЬКО на интерфейсе VPN (VPN_BIND_IP) — не в Интернет.
+# `!override` заменяет (а не дополняет) порты из базового/прод-файла, поэтому
+# публичная привязка 0.0.0.0 убирается. Если VPN_BIND_IP не задан — привязка к
+# 127.0.0.1 (наружу по-прежнему ничего не открыто).
+#
+# Запуск на VPS (VPN_BIND_IP — адрес интерфейса WireGuard/Tailscale, напр. 10.8.0.1):
+#   VPN_BIND_IP=10.8.0.1 docker compose \
+#     -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.vpn.yml \
+#     --env-file .env.production up -d
+#
+# На AI-узле в .env: AI_REDIS_HOST=<VPN_BIND_IP>, AI_S3_ENDPOINT=http://<VPN_BIND_IP>:9000
+
+services:
+  redis:
+    ports: !override
+      - "${VPN_BIND_IP:-127.0.0.1}:6379:6379"
+  minio:
+    ports: !override
+      - "${VPN_BIND_IP:-127.0.0.1}:9000:9000"

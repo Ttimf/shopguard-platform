@@ -15,6 +15,7 @@ class EventBus:
             port=settings.REDIS_PORT,
             password=settings.REDIS_PASSWORD,
             protocol=2,
+            **settings.REDIS_SSL_KWARGS,  # опциональный TLS (по умолчанию выкл)
         )
 
     def publish(

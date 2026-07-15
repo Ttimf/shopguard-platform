@@ -12,6 +12,8 @@ import uuid
 
 import redis
 
+from . import settings
+
 
 class RpcError(Exception):
     pass
@@ -25,6 +27,7 @@ class RedisRpc:
             password=password,
             decode_responses=True,
             protocol=2,  # RESP2 — совместимо со старыми Redis (нет HELLO)
+            **settings.REDIS_SSL_KWARGS,  # опциональный TLS (по умолчанию выкл)
         )
 
     def request(self, pattern: str, data: dict, timeout: float = 10.0):

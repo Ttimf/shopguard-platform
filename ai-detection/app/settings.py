@@ -17,10 +17,25 @@ def _float(name: str, default: float) -> float:
     return float(os.getenv(name, str(default)))
 
 
+def _bool(name: str, default: bool = False) -> bool:
+    return os.getenv(name, str(default)).lower() in ("1", "true", "yes", "on")
+
+
 # --- Redis ---
 REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 REDIS_PORT = _int("REDIS_PORT", 6379)
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD") or None
+
+# Опциональный TLS для Redis (напр. при подключении удалённого воркера без VPN).
+# По умолчанию ВЫКЛ — обратная совместимость (VPN шифрует транспорт сам).
+# REDIS_TLS_INSECURE — не проверять сертификат (self-signed).
+REDIS_TLS = _bool("REDIS_TLS", False)
+REDIS_TLS_INSECURE = _bool("REDIS_TLS_INSECURE", False)
+REDIS_SSL_KWARGS = (
+    {"ssl": True, "ssl_cert_reqs": "none" if REDIS_TLS_INSECURE else "required"}
+    if REDIS_TLS
+    else {}
+)
 
 # --- HTTP health ---
 HTTP_PORT = _int("PORT", 8000)
