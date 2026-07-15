@@ -38,6 +38,7 @@ class CameraWorker(threading.Thread):
         self._events = event_bus
         self._seen: set[int] = set()  # треки для PersonDetected
         self._stop = threading.Event()
+        self.frames_processed = 0  # для расчёта FPS в heartbeat воркера
 
         self.camera_id: str = config["id"]
         self.store_id: str = config["storeId"]
@@ -60,6 +61,11 @@ class CameraWorker(threading.Thread):
 
     def stop(self) -> None:
         self._stop.set()
+
+    @property
+    def active_tracks(self) -> int:
+        """Число текущих отслеживаемых треков (для heartbeat воркера)."""
+        return len(self._theft._tracks)
 
     def run(self) -> None:
         # A/B: эффективная модель магазина (override → canary → default)
@@ -113,6 +119,7 @@ class CameraWorker(threading.Thread):
                     if now - last < min_interval:
                         continue
                     last = now
+                    self.frames_processed += 1  # для FPS в heartbeat
 
                     # горячая замена модели при switch() — только если следуем
                     # default (магазины с override/canary закреплены за моделью)

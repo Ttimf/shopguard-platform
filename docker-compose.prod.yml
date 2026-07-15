@@ -45,6 +45,8 @@ services:
     ports: []
   event:
     ports: []
+  worker:
+    ports: []
   ai-detection:
     ports: []
 

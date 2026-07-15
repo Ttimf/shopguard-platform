@@ -4,7 +4,7 @@
   "description": "ShopGuard backend — NestJS микросервисы (монорепо)",
   "private": true,
   "scripts": {
-    "build:all": "nest build gateway && nest build auth && nest build user && nest build camera && nest build notification && nest build storage && nest build event",
+    "build:all": "nest build gateway && nest build auth && nest build user && nest build camera && nest build notification && nest build storage && nest build event && nest build worker",
     "start:gateway": "nest start gateway",
     "start:auth": "nest start auth",
     "start:dev": "nest start gateway --watch",

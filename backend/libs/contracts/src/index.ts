@@ -2,6 +2,7 @@ export * from './auth';
 export * from './camera';
 export * from './notification';
 export * from './event';
+export * from './worker';
 
 // Общие контракты между сервисами (единый язык событий).
 

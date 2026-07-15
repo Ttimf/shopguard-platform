@@ -292,3 +292,33 @@ model AlertDecision {
   @@index([storeId, alertType])
   @@index([createdAt])
 }
+
+// ---- AI Worker (регистрация + heartbeat узлов ai-detection) ----
+
+model AiWorker {
+  id            String   @id // worker_id (UUID, задаётся самим воркером)
+  hostname      String
+  version       String
+  gpuName       String?
+  gpuMemory     Int? // общий VRAM, МБ
+  cuda          String?
+  driverVersion String?
+  status        String   @default("ONLINE") // ONLINE | OFFLINE
+  startedAt     DateTime
+  lastSeen      DateTime
+  // последний heartbeat (каждые ~5с)
+  gpuUsage      Int? // %
+  vramUsed      Int? // МБ
+  temperature   Int? // °C
+  power         Int? // Вт
+  cpu           Int? // %
+  ram           Int? // %
+  fps           Int?
+  cameras       Int?
+  tracks        Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([lastSeen])
+}

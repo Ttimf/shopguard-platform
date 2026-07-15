@@ -8,3 +8,7 @@ boto3==1.35.0
 # Этап 7b — распознавание лиц / чёрный список
 insightface==0.7.3
 onnxruntime==1.19.2
+
+# AI Worker — метрики GPU (pynvml) и CPU/RAM (psutil) для heartbeat
+nvidia-ml-py==12.560.30
+psutil==6.0.0

@@ -17,6 +17,7 @@
     "notification": { "type": "application", "root": "apps/notification", "entryFile": "main", "sourceRoot": "apps/notification/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } },
     "event": { "type": "application", "root": "apps/event", "entryFile": "main", "sourceRoot": "apps/event/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } },
     "storage": { "type": "application", "root": "apps/storage", "entryFile": "main", "sourceRoot": "apps/storage/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } },
+    "worker": { "type": "application", "root": "apps/worker", "entryFile": "main", "sourceRoot": "apps/worker/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } },
     "common": { "type": "library", "root": "libs/common", "entryFile": "index", "sourceRoot": "libs/common/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } },
     "contracts": { "type": "library", "root": "libs/contracts", "entryFile": "index", "sourceRoot": "libs/contracts/src", "compilerOptions": { "tsConfigPath": "tsconfig.build.json" } }
   }

@@ -66,8 +66,14 @@ RTSP_READ_TIMEOUT_MS = _int("RTSP_READ_TIMEOUT_MS", 10000)
 # Ограничение множества виденных треков (защита от роста памяти при долгой работе).
 SEEN_TRACK_CAP = _int("SEEN_TRACK_CAP", 5000)
 
+# --- AI Worker (регистрация + heartbeat) ---
+WORKER_VERSION = os.getenv("WORKER_VERSION", "1.0.0")
+WORKER_HEARTBEAT_SECONDS = _int("WORKER_HEARTBEAT_SECONDS", 5)
+
 # --- Контракты (должны совпадать с libs/contracts) ---
 DETECTION_EVENTS_STREAM = "detection.events"
 EVENTS_STREAM = "events.stream"  # шина Event Engine
 CONFIG_LIST_PATTERN = "camera.config.list"
 BLACKLIST_CONFIG_PATTERN = "camera.blacklist.config"
+WORKER_REGISTER_PATTERN = "worker.register"
+WORKER_HEARTBEAT_PATTERN = "worker.heartbeat"

@@ -30,6 +30,7 @@ from app.frame_registry import FrameRegistry
 from app.model_manager import ModelManager
 from app.redis_rpc import RedisRpc
 from app.storage import Storage
+from app.worker_client import WorkerClient
 
 
 class ApiHandler(BaseHTTPRequestHandler):
@@ -285,6 +286,29 @@ def main():
         ConfigClient(rpc), publisher, storage, faces, model_manager,
         frame_registry, event_bus,
     )
+
+    # AI Worker: регистрация узла + heartbeat каждые ~5с
+    # (метрики GPU/CPU/RAM берёт WorkerClient, а камеры/треки/FPS — отсюда).
+    hb_state = {"frames": 0, "time": time.time()}
+
+    def _worker_metrics():
+        workers = [w for (w, _sig) in orchestrator._workers.values()]
+        cameras = len(workers)
+        tracks = sum(w.active_tracks for w in workers)
+        total_frames = sum(w.frames_processed for w in workers)
+        now = time.time()
+        dt = now - hb_state["time"]
+        fps = int((total_frames - hb_state["frames"]) / dt) if dt > 0 else 0
+        hb_state["frames"] = total_frames
+        hb_state["time"] = now
+        return cameras, tracks, max(0, fps)
+
+    worker = WorkerClient(
+        RedisRpc(settings.REDIS_HOST, settings.REDIS_PORT, settings.REDIS_PASSWORD),
+        _worker_metrics,
+    )
+    worker.register()
+    worker.start_heartbeat()
 
     print("ai-detection: запущен, опрос конфигурации камер…")
     while True:

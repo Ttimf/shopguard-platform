@@ -148,6 +148,21 @@ services:
     depends_on: [redis, postgres]
     healthcheck: *node-health
 
+  # WorkerManager: регистрация + heartbeat узлов ai-detection.
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "dist/apps/worker/main.js"]
+    environment:
+      PORT: 3007
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-redis_secret}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-shopguard}:${POSTGRES_PASSWORD:-shopguard_secret}@postgres:5432/${POSTGRES_DB:-shopguard}?schema=public
+    ports: ["3007:3007"]
+    depends_on: [redis, postgres]
+    healthcheck: *node-health
+
   ai-detection:
     build: ./ai-detection
     restart: unless-stopped
